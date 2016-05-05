@@ -12,35 +12,46 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
 import java.util.Calendar;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class Main {
+
+    public static void main(String[] args) throws Exception {
+        Configuration conf = new Configuration();
+
+        Job job = Job.getInstance(conf, "hit statistics");
+        job.setJarByClass(Main.class);
+
+        job.setMapperClass(HitStatisticsMapper.class);
+        job.setCombinerClass(HitStatisticsReducer.class);
+        job.setReducerClass(HitStatisticsReducer.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
 
     @SuppressWarnings("Since15")
     public static class HitStatisticsMapper extends Mapper<Object, Text, Text, IntWritable> {
 
         private final static IntWritable one = new IntWritable(1);
         private Text word = new Text();
-        private Pattern pattern;
-
-        public HitStatisticsMapper() {
-            pattern = Pattern.compile("-?(?<userid>\\d+)\\s+(?<timestamp>\\d+)\\s+"
-                    + "(?<url>http://(?<domain>[-_\\p{Alnum}.]+)[-?_/\\p{Alnum}.]*)\\s+"
-                    + "diff_time:(?<spenttime>\\d+)");
-        }
 
         public void map(Object key, Text value, Context context
         ) throws IOException, InterruptedException {
             String line = value.toString();
-            Matcher matcher = pattern.matcher(line);
-            if (matcher.matches()) {
-                long timestampSeconds = Long.parseLong(matcher.group("timestamp"));
-                String timestampString = getTimestampString(timestampSeconds);
-                String domain = matcher.group("domain");
-                word.set(timestampString + "%" + domain);
-                context.write(word, one);
-            }
+            String[] split = line.split("\\s+");
+
+            String hour = split[1];
+            long timestampSeconds = Long.parseLong(hour);
+            String timestampString = getTimestampString(timestampSeconds);
+
+            String url = split[2];
+            word.set(timestampString + "%" + url);
+            context.write(word, one);
         }
 
         private String getTimestampString(long timestampSeconds) {
@@ -82,25 +93,6 @@ public class Main {
             tableManager.put(new String[]{hour, domain, hits});
         }
 
-    }
-
-    public static void main(String[] args) throws Exception {
-        Configuration conf = new Configuration();
-
-        Job job = Job.getInstance(conf, "word count");
-        job.setJarByClass(Main.class);
-
-        job.setMapperClass(HitStatisticsMapper.class);
-        job.setCombinerClass(HitStatisticsReducer.class);
-        job.setReducerClass(HitStatisticsReducer.class);
-
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
-
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
-
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 
 }
